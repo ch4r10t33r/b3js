@@ -2,27 +2,42 @@
   "name": "b3js",
   "version": "0.1.0",
   "description": "Fast and highly optimized pure JavaScript implementation of BLAKE3 hash function",
-  "module": "index.ts",
   "type": "module",
-  "main": "index.ts",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "types": "./index.ts",
   "exports": {
-    ".": "./index.ts"
+    ".": {
+      "import": "./index.ts",
+      "require": "./index.ts",
+      "types": "./index.ts"
+    }
+  },
+  "browser": {
+    "./index.ts": "./index.ts"
   },
   "scripts": {
     "test": "bun test",
-    "bench": "bun run src/benchmark.ts"
+    "bench": "bun run src/benchmark.ts",
+    "prepublishOnly": "bun test"
   },
   "keywords": [
     "blake3",
     "hash",
     "cryptography",
     "fast",
-    "optimized"
+    "optimized",
+    "browser",
+    "react",
+    "nodejs",
+    "typescript"
   ],
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "typescript": "^5"

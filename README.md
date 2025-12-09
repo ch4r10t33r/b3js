@@ -10,12 +10,34 @@ Fast and highly optimized pure JavaScript implementation of the BLAKE3 hash func
 - 🔐 **Key derivation**: Support for key derivation (KDF)
 - 📏 **Variable output length**: Generate hashes of any length
 - 💯 **Pure JavaScript**: No native dependencies, works everywhere
+- 🌐 **Universal**: Works in Node.js, Bun, React, and browser environments
+- 📦 **TypeScript**: Full TypeScript support with type definitions
 
 ## Installation
 
+### Node.js / Bun
+
 ```bash
-bun install
+npm install b3js
+# or
+bun add b3js
 ```
+
+### React / Browser
+
+```bash
+npm install b3js
+# or
+yarn add b3js
+# or
+pnpm add b3js
+```
+
+The library works in both Node.js and browser environments:
+
+- **Node.js**: Use with a TypeScript loader like `tsx`, `ts-node`, or configure your bundler
+- **React/Browser**: Modern bundlers (Vite, Webpack, Next.js, etc.) handle TypeScript automatically
+- **Bun**: Native TypeScript support, works out of the box
 
 ## Usage
 
@@ -31,6 +53,12 @@ console.log(digest); // Uint8Array(32)
 // Hash with custom output length
 const longHash = hash('hello world', 64);
 console.log(longHash); // Uint8Array(64)
+```
+
+**Note for Node.js users:** If you're using Node.js directly (not a bundler), you'll need a TypeScript loader:
+```bash
+npm install -D tsx
+npx tsx your-script.ts
 ```
 
 ### Streaming/Incremental Hashing
@@ -94,12 +122,62 @@ Finalize and return hash.
 bun test
 ```
 
+## Publishing
+
+This package is automatically published to npm when:
+- Changes are merged to `master` or `main` branch
+- The version number in `package.json` has changed
+
+The CI workflow will:
+1. Run all tests
+2. Check if version changed from previous commit
+3. Publish to npm if version changed
+
+To publish a new version:
+1. Update the `version` field in `package.json`
+2. Commit and push to `master`/`main`
+3. The CI will automatically publish to npm
+
+**Setup Required:** See [NPM_PUBLISH_SETUP.md](./NPM_PUBLISH_SETUP.md) for detailed authentication setup instructions.
+
+**Quick Setup:**
+1. Create an npm Automation token at https://www.npmjs.com/settings/YOUR_USERNAME/tokens
+2. Add it as `NPM_TOKEN` secret in GitHub repository settings
+
 ## Performance
 
-The implementation is optimized for performance using:
+The implementation is highly optimized for performance using techniques inspired by [Fleek Network's BLAKE3 optimization case study](https://blog.fleek.network/post/fleek-network-blake3-case-study/):
+
+### Optimizations Applied
+
+- **Optimized G function**: Uses local variables to minimize array accesses and reduce redundant loads/stores
+- **Better state management**: Improved compress function with pre-computed permutation indices
+- **DataView optimization**: Uses DataView for aligned byte-to-word conversion when possible
+- **Reduced allocations**: Pre-allocated buffers and in-place operations where possible
+- **Memory-efficient chunking**: Periodic stack merging for large inputs to reduce memory pressure
+- **Cache-friendly access patterns**: Optimized data layout and access order
+- **WASM SIMD support**: Parallel processing of 4 blocks/chunks using WebAssembly SIMD when available
+
+### Performance Characteristics
+
+- **Small inputs (< 1KB)**: Very fast, optimized for common use cases
+- **Medium inputs (1KB - 100KB)**: Excellent performance with efficient chunk processing
+- **Large inputs (> 100KB)**: Memory-efficient with periodic stack merging
+- **Streaming**: Optimized incremental hashing with minimal overhead
+
+### Benchmarking
+
+Run the benchmark to see performance on your system:
+
+```bash
+bun run src/benchmark.ts
+```
+
+The implementation uses:
 - `Uint32Array` for efficient 32-bit integer operations
 - Minimal memory allocations
 - Tree-structured hashing for potential parallelization
+- Optimized compression function with reduced memory operations
 
 ## License
 
