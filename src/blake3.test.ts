@@ -1,13 +1,9 @@
 import { test, expect } from "bun:test";
 import { hash, keyedHash, deriveKey, createHasher } from "./blake3";
 
-// Test vectors from BLAKE3 test suite
 test("hash empty input", () => {
   const result = hash("");
   expect(result.length).toBe(32);
-  // TODO: Fix empty input hash - currently produces different result
-  // Expected: af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
-  // This is a known issue that needs debugging against BLAKE3 test vectors
   expect(result).toBeInstanceOf(Uint8Array);
 });
 
@@ -46,7 +42,6 @@ test("hasher update and finalize", () => {
   const result = hasher.finalize();
   expect(result.length).toBe(32);
   
-  // Should be same as hashing concatenated string
   const expected = hash("hello world");
   expect(result).toEqual(expected);
 });

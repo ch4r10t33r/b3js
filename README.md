@@ -96,10 +96,37 @@ bun test
 
 ## Performance
 
-The implementation is optimized for performance using:
+The implementation is highly optimized for performance using techniques inspired by [Fleek Network's BLAKE3 optimization case study](https://blog.fleek.network/post/fleek-network-blake3-case-study/):
+
+### Optimizations Applied
+
+- **Optimized G function**: Uses local variables to minimize array accesses and reduce redundant loads/stores
+- **Better state management**: Improved compress function with pre-computed permutation indices
+- **DataView optimization**: Uses DataView for aligned byte-to-word conversion when possible
+- **Reduced allocations**: Pre-allocated buffers and in-place operations where possible
+- **Memory-efficient chunking**: Periodic stack merging for large inputs to reduce memory pressure
+- **Cache-friendly access patterns**: Optimized data layout and access order
+
+### Performance Characteristics
+
+- **Small inputs (< 1KB)**: Very fast, optimized for common use cases
+- **Medium inputs (1KB - 100KB)**: Excellent performance with efficient chunk processing
+- **Large inputs (> 100KB)**: Memory-efficient with periodic stack merging
+- **Streaming**: Optimized incremental hashing with minimal overhead
+
+### Benchmarking
+
+Run the benchmark to see performance on your system:
+
+```bash
+bun run src/benchmark.ts
+```
+
+The implementation uses:
 - `Uint32Array` for efficient 32-bit integer operations
 - Minimal memory allocations
 - Tree-structured hashing for potential parallelization
+- Optimized compression function with reduced memory operations
 
 ## License
 
