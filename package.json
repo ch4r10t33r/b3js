@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "bun test",
-    "bench": "bun run src/benchmark.ts"
+    "bench": "bun run src/benchmark.ts",
+    "prepublishOnly": "bun test"
   },
   "keywords": [
     "blake3",

@@ -94,6 +94,24 @@ Finalize and return hash.
 bun test
 ```
 
+## Publishing
+
+This package is automatically published to npm when:
+- Changes are merged to `master` or `main` branch
+- The version number in `package.json` has changed
+
+The CI workflow will:
+1. Run all tests
+2. Check if version changed from previous commit
+3. Publish to npm if version changed
+
+To publish a new version:
+1. Update the `version` field in `package.json`
+2. Commit and push to `master`/`main`
+3. The CI will automatically publish to npm
+
+**Note:** You need to set up `NPM_TOKEN` secret in GitHub repository settings.
+
 ## Performance
 
 The implementation is highly optimized for performance using techniques inspired by [Fleek Network's BLAKE3 optimization case study](https://blog.fleek.network/post/fleek-network-blake3-case-study/):
