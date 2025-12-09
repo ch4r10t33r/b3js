@@ -50,7 +50,7 @@ jobs:
       
       - name: Create Node.js compatibility test
         run: |
-          cat > test-nodejs.mjs << 'EOF'
+          cat > test-nodejs.ts << 'EOF'
           // Test Node.js compatibility
           import { hash, keyedHash, deriveKey, createHasher } from './index.ts';
           
@@ -79,8 +79,8 @@ jobs:
           console.log('All Node.js tests passed!');
           EOF
       
-      - name: Run Node.js test
-        run: node test-nodejs.mjs
+      - name: Run Node.js test with tsx
+        run: npx tsx test-nodejs.ts
 
   test-browser:
     name: Test Browser/React Compatibility

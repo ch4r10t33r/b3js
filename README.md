@@ -33,7 +33,11 @@ yarn add b3js
 pnpm add b3js
 ```
 
-The library works in both Node.js and browser environments without any additional configuration.
+The library works in both Node.js and browser environments:
+
+- **Node.js**: Use with a TypeScript loader like `tsx`, `ts-node`, or configure your bundler
+- **React/Browser**: Modern bundlers (Vite, Webpack, Next.js, etc.) handle TypeScript automatically
+- **Bun**: Native TypeScript support, works out of the box
 
 ## Usage
 
@@ -49,6 +53,12 @@ console.log(digest); // Uint8Array(32)
 // Hash with custom output length
 const longHash = hash('hello world', 64);
 console.log(longHash); // Uint8Array(64)
+```
+
+**Note for Node.js users:** If you're using Node.js directly (not a bundler), you'll need a TypeScript loader:
+```bash
+npm install -D tsx
+npx tsx your-script.ts
 ```
 
 ### Streaming/Incremental Hashing
