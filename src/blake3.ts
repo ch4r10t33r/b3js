@@ -107,10 +107,18 @@ export function compress(
   blockLen: number,
   flags: number
 ): Uint32Array {
+  // Make a copy of blockWords to avoid mutating the input
+  const block = new Uint32Array(blockWords);
+  
   const state = new Uint32Array(16);
   
+  // state[0-7] = chaining value (key)
   state.set(chainingValue, 0);
-  state.set(IV, 4);
+  // state[8-11] = first 4 words of IV (BLAKE3 uses IV[0-3])
+  state[8] = IV[0];
+  state[9] = IV[1];
+  state[10] = IV[2];
+  state[11] = IV[3];
   
   const counterLow = Number(counter & 0xffffffffn);
   const counterHigh = Number((counter >> 32n) & 0xffffffffn);
@@ -119,33 +127,46 @@ export function compress(
   state[14] = blockLen;
   state[15] = flags;
   
-  const perm = MSG_PERMUTATION;
+  // Make a copy of chainingValue for final XOR (reference uses original)
+  const originalCV = new Uint32Array(chainingValue);
   
   for (let round = 0; round < 7; round++) {
-    g(state, 0, 4, 8, 12, blockWords[perm[0]], blockWords[perm[1]]);
-    g(state, 1, 5, 9, 13, blockWords[perm[2]], blockWords[perm[3]]);
-    g(state, 2, 6, 10, 14, blockWords[perm[4]], blockWords[perm[5]]);
-    g(state, 3, 7, 11, 15, blockWords[perm[6]], blockWords[perm[7]]);
+    // Use block directly (it's already permuted from previous round, or original in first round)
+    g(state, 0, 4, 8, 12, block[0], block[1]);
+    g(state, 1, 5, 9, 13, block[2], block[3]);
+    g(state, 2, 6, 10, 14, block[4], block[5]);
+    g(state, 3, 7, 11, 15, block[6], block[7]);
     
-    g(state, 0, 5, 10, 15, blockWords[perm[8]], blockWords[perm[9]]);
-    g(state, 1, 6, 11, 12, blockWords[perm[10]], blockWords[perm[11]]);
-    g(state, 2, 7, 8, 13, blockWords[perm[12]], blockWords[perm[13]]);
-    g(state, 3, 4, 9, 14, blockWords[perm[14]], blockWords[perm[15]]);
+    g(state, 0, 5, 10, 15, block[8], block[9]);
+    g(state, 1, 6, 11, 12, block[10], block[11]);
+    g(state, 2, 7, 8, 13, block[12], block[13]);
+    g(state, 3, 4, 9, 14, block[14], block[15]);
+    
+    // Permute block words for next round (except after last round)
+    if (round < 6) {
+      const permuted = new Uint32Array(16);
+      for (let i = 0; i < 16; i++) {
+        permuted[i] = block[MSG_PERMUTATION[i]!];
+      }
+      block.set(permuted);
+    }
   }
   
-  const output = new Uint32Array(8);
+  // Finalize: XOR state as per BLAKE3 reference implementation
   for (let i = 0; i < 8; i++) {
-    output[i] = (state[i] ^ state[i + 8]) >>> 0;
+    state[i] = (state[i] ^ state[i + 8]) >>> 0;
+    state[i + 8] = (state[i + 8] ^ originalCV[i]!) >>> 0;
   }
   
-  return output;
+  // Return first 8 words as chaining value
+  return new Uint32Array(state.slice(0, 8));
 }
 
 /**
  * Convert bytes to words (little-endian)
  */
 function wordsFromBytes(bytes: Uint8Array): Uint32Array {
-  const words = new Uint32Array(16);
+  const words = new Uint32Array(16); // Already zero-initialized
   if (bytes.byteOffset % 4 === 0 && bytes.length >= 64) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, 64);
     for (let i = 0; i < 16; i++) {
@@ -155,10 +176,10 @@ function wordsFromBytes(bytes: Uint8Array): Uint32Array {
     for (let i = 0; i < 16; i++) {
       const offset = i * 4;
       words[i] =
-        bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
+        (bytes[offset] || 0) |
+        ((bytes[offset + 1] || 0) << 8) |
+        ((bytes[offset + 2] || 0) << 16) |
+        ((bytes[offset + 3] || 0) << 24);
     }
   }
   return words;
@@ -203,6 +224,7 @@ export class Blake3Hasher {
   private flags: number;
   private stack: Uint32Array[];
   private stackLen: number;
+  private lastChunkBlockLen: number; // Track block_len of the last chunk for root compression
 
   constructor(key?: Uint8Array, flags: number = 0) {
     if (key) {
@@ -221,6 +243,7 @@ export class Blake3Hasher {
     this.blockLen = 0;
     this.stack = [];
     this.stackLen = 0;
+    this.lastChunkBlockLen = 0;
   }
 
   /**
@@ -346,6 +369,7 @@ export class Blake3Hasher {
       chunkFlags &= ~CHUNK_START;
     }
     
+    this.lastChunkBlockLen = BLOCK_LEN; // Full chunk uses BLOCK_LEN
     this.addChunkChainingValue(cv);
   }
 
@@ -398,67 +422,70 @@ export class Blake3Hasher {
     
     const flags = this.flags | PARENT;
     const counter = 0n;
+    // Parent nodes use the key: for unkeyed it's IV (first8Words), for keyed it's the key (chainingValue)
+    // Since chainingValue is initialized to first8Words() for unkeyed, we can use it
     const keyCV = this.chainingValue.slice(0, 8);
     
     return compress(keyCV, blockWords, counter, BLOCK_LEN, flags);
   }
 
   finalize(outLen: number = OUT_LEN): Uint8Array {
-    if (this.blockLen > 0) {
-      const blockWords = wordsFromBytes(this.block.slice(0, this.blockLen));
-      const flags = this.flags | (this.chunkCounter === 0n ? CHUNK_START : 0) | CHUNK_END;
-      const cv = compress(
-        this.chainingValue,
-        blockWords,
-        this.chunkCounter,
-        this.blockLen,
-        flags
-      );
-      
-      this.addChunkChainingValue(cv);
-      this.blockLen = 0;
+    // Get the output from the current chunk (like chunk_state.output() in reference)
+    // The Output contains: input_chaining_value, block_words, counter, block_len, flags
+    let outputBlockWords: Uint32Array;
+    let outputBlockLen: number;
+    let outputChainingValue: Uint32Array;
+    let outputCounter: bigint;
+    let outputFlags: number;
+    
+    if (this.chunkCounter === 0n && this.blockLen === 0) {
+      // Empty input case
+      outputBlockWords = new Uint32Array(16);
+      outputBlockLen = 0;
+      outputChainingValue = this.chainingValue.slice(0, 8);
+      outputCounter = 0n;
+      outputFlags = this.flags | CHUNK_START | CHUNK_END;
+    } else {
+      // Process any remaining block to get the final block words
+      if (this.blockLen > 0) {
+        outputBlockWords = wordsFromBytes(this.block.slice(0, this.blockLen));
+        outputBlockLen = this.blockLen;
+        outputChainingValue = this.chainingValue.slice(0, 8);
+        outputCounter = this.chunkCounter;
+        outputFlags = this.flags | (this.chunkCounter === 0n ? CHUNK_START : 0) | CHUNK_END;
+      } else {
+        // Last chunk was a full chunk - we need to get its output
+        // The last chunk's chaining value is in the stack, but we need its block words
+        // For a full chunk, the last block was BLOCK_LEN, so we use zeros (already processed)
+        outputBlockWords = new Uint32Array(16); // Last block was already compressed
+        outputBlockLen = BLOCK_LEN;
+        outputChainingValue = this.stack[this.stackLen - 1]!;
+        outputCounter = this.chunkCounter - 1n; // Last chunk counter
+        outputFlags = this.flags | CHUNK_END;
+      }
     }
     
-    if (this.chunkCounter === 0n && this.stackLen === 0) {
-      const blockWords = new Uint32Array(16);
-      const flags = this.flags | CHUNK_START | CHUNK_END;
-      const cv = compress(
-        this.chainingValue,
-        blockWords,
-        0n,
-        0,
-        flags
-      );
-      
-      const rootBlockWords = new Uint32Array(16);
-      rootBlockWords.set(cv, 0);
-      
-      const rootOutput = compress(
-        first8Words(),
-        rootBlockWords,
-        0n,
-        BLOCK_LEN,
-        this.flags | ROOT
-      );
-      
-      return this.expandOutput(rootOutput, outLen);
+    // Compute parent nodes (like parent_output in reference) - process in reverse
+    for (let i = this.stackLen - 2; i >= 0; i--) {
+      const leftCV = this.stack[i]!;
+      outputChainingValue = this.parentOutput(leftCV, outputChainingValue);
+      outputBlockWords = new Uint32Array(16);
+      outputBlockWords.set(leftCV, 0);
+      outputBlockWords.set(outputChainingValue, 8);
+      outputBlockLen = BLOCK_LEN; // Parent nodes always use BLOCK_LEN
+      outputCounter = 0n; // Parent nodes always use counter 0
+      outputFlags = this.flags | PARENT;
     }
     
-    let rootCV = this.stack[0]!;
-    
-    for (let i = 1; i < this.stackLen; i++) {
-      rootCV = this.parentOutput(rootCV, this.stack[i]!);
-    }
-    
-    const rootBlockWords = new Uint32Array(16);
-    rootBlockWords.set(rootCV, 0);
-    
+    // Root output (like root_output_bytes in reference)
+    // Root uses the key: for unkeyed it's IV (first8Words), for keyed it's the key (chainingValue)
+    const rootKeyCV = this.chainingValue.slice(0, 8);
     const rootOutput = compress(
-      first8Words(),
-      rootBlockWords,
-      0n,
-      BLOCK_LEN,
-      this.flags | ROOT
+      rootKeyCV,
+      outputBlockWords,
+      outputCounter,
+      outputBlockLen,
+      outputFlags | ROOT
     );
     
     return this.expandOutput(rootOutput, outLen);
