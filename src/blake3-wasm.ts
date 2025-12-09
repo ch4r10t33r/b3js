@@ -6,11 +6,9 @@
 import { compress } from './blake3';
 
 // Reserved for future WASM module integration
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let _wasmModule: WebAssembly.Module | null = null;
+// let wasmModule: WebAssembly.Module | null = null;
 let wasmInstance: WebAssembly.Instance | null = null;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let _wasmMemory: WebAssembly.Memory | null = null;
+// let wasmMemory: WebAssembly.Memory | null = null;
 let simdSupported = false;
 
 /**
@@ -120,8 +118,8 @@ function compress4xJS(
  * Processes 4 state vectors simultaneously
  * Reserved for future SIMD optimization
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _g4x(
+/*
+function g4x(
   states: Uint32Array[],
   a: number,
   b: number,
@@ -153,6 +151,7 @@ function _g4x(
     state[d] = sd;
   }
 }
+*/
 
 /**
  * Check if WASM SIMD is available
