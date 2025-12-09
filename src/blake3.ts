@@ -251,7 +251,6 @@ export class Blake3Hasher {
   private flags: number;
   private stack: Uint32Array[];
   private stackLen: number;
-  private lastChunkBlockLen: number; // Track block_len of the last chunk for root compression
 
   constructor(key?: Uint8Array, flags: number = 0) {
     if (key) {
@@ -270,7 +269,6 @@ export class Blake3Hasher {
     this.blockLen = 0;
     this.stack = [];
     this.stackLen = 0;
-    this.lastChunkBlockLen = 0;
   }
 
   /**
@@ -422,7 +420,6 @@ export class Blake3Hasher {
       chunkFlags &= ~CHUNK_START;
     }
     
-    this.lastChunkBlockLen = BLOCK_LEN; // Full chunk uses BLOCK_LEN
     this.addChunkChainingValue(cv);
   }
 
