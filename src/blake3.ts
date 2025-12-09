@@ -20,7 +20,8 @@
  * - WASM SIMD support for parallel block processing
  */
 
-import { compress4x, initWASM } from './blake3-wasm';
+import { initWASM } from './blake3-wasm';
+// compress4x reserved for future WASM SIMD integration
 
 // Initialize WASM SIMD support (non-blocking)
 initWASM().catch(() => {

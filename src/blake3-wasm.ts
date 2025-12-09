@@ -3,11 +3,14 @@
  * Processes 4 blocks in parallel using SIMD operations
  */
 
-import { compress, IV, MSG_PERMUTATION, BLOCK_LEN } from './blake3';
+import { compress } from './blake3';
 
-let wasmModule: WebAssembly.Module | null = null;
+// Reserved for future WASM module integration
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let _wasmModule: WebAssembly.Module | null = null;
 let wasmInstance: WebAssembly.Instance | null = null;
-let wasmMemory: WebAssembly.Memory | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let _wasmMemory: WebAssembly.Memory | null = null;
 let simdSupported = false;
 
 /**
@@ -115,8 +118,10 @@ function compress4xJS(
 /**
  * Optimized g function for 4 parallel blocks
  * Processes 4 state vectors simultaneously
+ * Reserved for future SIMD optimization
  */
-function g4x(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _g4x(
   states: Uint32Array[],
   a: number,
   b: number,
