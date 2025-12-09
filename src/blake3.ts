@@ -75,25 +75,32 @@ function g(
   mx: number,
   my: number
 ): void {
-  let sa = state[a];
-  let sb = state[b];
-  let sc = state[c];
-  let sd = state[d];
+  // OPTIMIZATION: Write to state immediately to reduce register pressure
+  // and potentially improve cache behavior
+  const sa = state[a];
+  const sb = state[b];
+  const sc = state[c];
+  const sd = state[d];
   
-  sa = (sa + sb + mx) >>> 0;
-  sd = rotr32(sd ^ sa, 16);
-  sc = (sc + sd) >>> 0;
-  sb = rotr32(sb ^ sc, 12);
+  // First round of mixing
+  let t1 = (sa + sb + mx) >>> 0;
+  state[a] = t1;
+  let t2 = rotr32(sd ^ t1, 16);
+  state[d] = t2;
+  let t3 = (sc + t2) >>> 0;
+  state[c] = t3;
+  let t4 = rotr32(sb ^ t3, 12);
+  state[b] = t4;
   
-  sa = (sa + sb + my) >>> 0;
-  sd = rotr32(sd ^ sa, 8);
-  sc = (sc + sd) >>> 0;
-  sb = rotr32(sb ^ sc, 7);
-  
-  state[a] = sa;
-  state[b] = sb;
-  state[c] = sc;
-  state[d] = sd;
+  // Second round of mixing
+  t1 = (t1 + t4 + my) >>> 0;
+  state[a] = t1;
+  t2 = rotr32(t2 ^ t1, 8);
+  state[d] = t2;
+  t3 = (t3 + t2) >>> 0;
+  state[c] = t3;
+  t4 = rotr32(t4 ^ t3, 7);
+  state[b] = t4;
 }
 
 /**
@@ -107,7 +114,8 @@ export function compress(
   blockLen: number,
   flags: number
 ): Uint32Array {
-  // Make a copy of blockWords to avoid mutating the input
+  // OPTIMIZATION: Make a copy of blockWords to avoid mutating the input
+  // We need to permute it, so we must copy
   const block = new Uint32Array(blockWords);
   
   const state = new Uint32Array(16);
@@ -127,8 +135,8 @@ export function compress(
   state[14] = blockLen;
   state[15] = flags;
   
-  // Make a copy of chainingValue for final XOR (reference uses original)
-  const originalCV = new Uint32Array(chainingValue);
+  // OPTIMIZATION: Reuse permutation buffer (allocate once, reuse 6 times)
+  const permuted = new Uint32Array(16);
   
   for (let round = 0; round < 7; round++) {
     // Use block directly (it's already permuted from previous round, or original in first round)
@@ -144,7 +152,7 @@ export function compress(
     
     // Permute block words for next round (except after last round)
     if (round < 6) {
-      const permuted = new Uint32Array(16);
+      // OPTIMIZATION: Reuse permuted buffer instead of allocating new one each round
       for (let i = 0; i < 16; i++) {
         permuted[i] = block[MSG_PERMUTATION[i]!];
       }
@@ -152,14 +160,15 @@ export function compress(
     }
   }
   
-  // Finalize: XOR state as per BLAKE3 reference implementation
+  // OPTIMIZATION: Manual copy instead of slice (faster, no intermediate allocation)
+  const output = new Uint32Array(8);
   for (let i = 0; i < 8; i++) {
     state[i] = (state[i] ^ state[i + 8]) >>> 0;
-    state[i + 8] = (state[i + 8] ^ originalCV[i]!) >>> 0;
+    state[i + 8] = (state[i + 8] ^ chainingValue[i]!) >>> 0;
+    output[i] = state[i]; // Direct assignment instead of slice
   }
   
-  // Return first 8 words as chaining value
-  return new Uint32Array(state.slice(0, 8));
+  return output;
 }
 
 /**
@@ -167,19 +176,34 @@ export function compress(
  */
 function wordsFromBytes(bytes: Uint8Array): Uint32Array {
   const words = new Uint32Array(16); // Already zero-initialized
-  if (bytes.byteOffset % 4 === 0 && bytes.length >= 64) {
+  
+  // OPTIMIZATION: Fast path for exact 64-byte blocks (most common case)
+  if (bytes.length === 64 && bytes.byteOffset % 4 === 0) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, 64);
     for (let i = 0; i < 16; i++) {
       words[i] = view.getUint32(i * 4, true);
     }
-  } else {
-    for (let i = 0; i < 16; i++) {
-      const offset = i * 4;
+    return words;
+  }
+  
+  // OPTIMIZATION: Avoid || 0 overhead - use bounds checking
+  const len = bytes.length;
+  for (let i = 0; i < 16; i++) {
+    const offset = i * 4;
+    if (offset + 3 < len) {
+      // Fast path: all bytes available
       words[i] =
-        (bytes[offset] || 0) |
-        ((bytes[offset + 1] || 0) << 8) |
-        ((bytes[offset + 2] || 0) << 16) |
-        ((bytes[offset + 3] || 0) << 24);
+        bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
+    } else {
+      // Slow path: handle padding when needed
+      words[i] =
+        (offset < len ? bytes[offset] : 0) |
+        ((offset + 1 < len ? bytes[offset + 1] : 0) << 8) |
+        ((offset + 2 < len ? bytes[offset + 2] : 0) << 16) |
+        ((offset + 3 < len ? bytes[offset + 3] : 0) << 24);
     }
   }
   return words;
@@ -200,8 +224,11 @@ function wordsToBytes(words: Uint32Array): Uint8Array {
   return bytes;
 }
 
+// OPTIMIZATION: Cache first8Words result (avoid allocating new array every call)
+const FIRST_8_WORDS = IV.slice(0, 8);
+
 function first8Words(): Uint32Array {
-  return IV.slice(0, 8);
+  return FIRST_8_WORDS; // Return cached value
 }
 
 function deriveKeyFromContext(key: Uint8Array, context: string): Uint32Array {
@@ -224,7 +251,6 @@ export class Blake3Hasher {
   private flags: number;
   private stack: Uint32Array[];
   private stackLen: number;
-  private lastChunkBlockLen: number; // Track block_len of the last chunk for root compression
 
   constructor(key?: Uint8Array, flags: number = 0) {
     if (key) {
@@ -243,7 +269,6 @@ export class Blake3Hasher {
     this.blockLen = 0;
     this.stack = [];
     this.stackLen = 0;
-    this.lastChunkBlockLen = 0;
   }
 
   /**
@@ -261,7 +286,8 @@ export class Blake3Hasher {
       if (this.blockLen > 0) {
         const want = BLOCK_LEN - this.blockLen;
         const take = Math.min(want, data.length - offset);
-        this.block.set(data.slice(offset, offset + take), this.blockLen);
+        // OPTIMIZATION: Use subarray (view, no copy) instead of slice
+        this.block.set(data.subarray(offset, offset + take), this.blockLen);
         this.blockLen += take;
         offset += take;
         
@@ -279,7 +305,11 @@ export class Blake3Hasher {
           const counters: bigint[] = [];
           
           for (let i = 0; i < 4; i++) {
-            chunks.push(data.slice(offset + (i * CHUNK_LEN), offset + ((i + 1) * CHUNK_LEN)));
+            // OPTIMIZATION: Use subarray (view, no copy) instead of slice
+            chunks.push(data.subarray(
+              offset + (i * CHUNK_LEN), 
+              offset + ((i + 1) * CHUNK_LEN)
+            ));
             counters.push(this.chunkCounter + BigInt(i));
           }
           
@@ -289,13 +319,15 @@ export class Blake3Hasher {
           this.chunkCounter += 4n;
           offset += CHUNK_LEN * 4;
         } else {
-          const chunk = data.slice(offset, offset + CHUNK_LEN);
+          // OPTIMIZATION: Use subarray (view, no copy) instead of slice
+          const chunk = data.subarray(offset, offset + CHUNK_LEN);
           this.compressChunk(chunk, this.chunkCounter);
           this.chunkCounter++;
           offset += CHUNK_LEN;
         }
         
-        if (this.chunkCounter % 1000n === 0n && this.stackLen > 0) {
+        // OPTIMIZATION: More aggressive stack merging for better memory locality
+        if (this.chunkCounter % 100n === 0n && this.stackLen > 0) {
           this.mergeStack();
         }
       }
@@ -304,7 +336,8 @@ export class Blake3Hasher {
       if (offset < data.length) {
         const remaining = data.length - offset;
         const want = Math.min(remaining, BLOCK_LEN - this.blockLen);
-        this.block.set(data.slice(offset, offset + want), this.blockLen);
+        // OPTIMIZATION: Use subarray (view, no copy) instead of slice
+        this.block.set(data.subarray(offset, offset + want), this.blockLen);
         this.blockLen += want;
         offset += want;
       }
@@ -347,18 +380,36 @@ export class Blake3Hasher {
   private compressChunk(chunk: Uint8Array, counter: bigint): void {
     let cv = this.chainingValue;
     let chunkFlags = this.flags | CHUNK_START;
+    // OPTIMIZATION: Reuse blockWords buffer (allocate once, reuse 16 times)
     const blockWords = new Uint32Array(16);
     
     for (let i = 0; i < CHUNK_LEN; i += BLOCK_LEN) {
-      const block = chunk.slice(i, i + BLOCK_LEN);
+      // OPTIMIZATION: Use subarray view instead of slice (no copy)
+      const block = chunk.subarray(i, i + BLOCK_LEN);
       
-      for (let j = 0; j < 16; j++) {
-        const offset = j * 4;
-        blockWords[j] =
-          block[offset] |
-          (block[offset + 1] << 8) |
-          (block[offset + 2] << 16) |
-          (block[offset + 3] << 24);
+      // OPTIMIZATION: Use optimized conversion for full blocks
+      if (block.length === BLOCK_LEN) {
+        // Fast path: use DataView for aligned data
+        if (block.byteOffset % 4 === 0 && block.buffer) {
+          const view = new DataView(block.buffer, block.byteOffset, BLOCK_LEN);
+          for (let j = 0; j < 16; j++) {
+            blockWords[j] = view.getUint32(j * 4, true);
+          }
+        } else {
+          // Fallback to optimized conversion
+          for (let j = 0; j < 16; j++) {
+            const offset = j * 4;
+            blockWords[j] =
+              block[offset] |
+              (block[offset + 1] << 8) |
+              (block[offset + 2] << 16) |
+              (block[offset + 3] << 24);
+          }
+        }
+      } else {
+        // Partial block - use wordsFromBytes
+        const temp = wordsFromBytes(block);
+        blockWords.set(temp);
       }
       
       if (i + BLOCK_LEN === CHUNK_LEN) {
@@ -369,7 +420,6 @@ export class Blake3Hasher {
       chunkFlags &= ~CHUNK_START;
     }
     
-    this.lastChunkBlockLen = BLOCK_LEN; // Full chunk uses BLOCK_LEN
     this.addChunkChainingValue(cv);
   }
 
@@ -424,7 +474,8 @@ export class Blake3Hasher {
     const counter = 0n;
     // Parent nodes use the key: for unkeyed it's IV (first8Words), for keyed it's the key (chainingValue)
     // Since chainingValue is initialized to first8Words() for unkeyed, we can use it
-    const keyCV = this.chainingValue.slice(0, 8);
+    // OPTIMIZATION: Use subarray (view, not copy) instead of slice
+    const keyCV = this.chainingValue.subarray(0, 8);
     
     return compress(keyCV, blockWords, counter, BLOCK_LEN, flags);
   }

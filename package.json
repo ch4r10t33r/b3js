@@ -1,6 +1,6 @@
 {
   "name": "b3js",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Fast and highly optimized pure JavaScript implementation of BLAKE3 hash function",
   "type": "module",
   "main": "./index.ts",
