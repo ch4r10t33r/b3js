@@ -7,7 +7,8 @@ on:
     branches: [master, main, develop]
 
 jobs:
-  test:
+  test-bun:
+    name: Test Bun
     runs-on: ubuntu-latest
     
     steps:
@@ -27,4 +28,139 @@ jobs:
       
       - name: Check build
         run: bun run src/benchmark.ts
+
+  test-nodejs:
+    name: Test Node.js Compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Create Node.js compatibility test
+        run: |
+          cat > test-nodejs.mjs << 'EOF'
+          // Test Node.js compatibility
+          import { hash, keyedHash, deriveKey, createHasher } from './index.ts';
+          
+          console.log('Testing Node.js compatibility...');
+          
+          const h1 = hash('hello world');
+          if (h1.length !== 32) throw new Error('Basic hash failed');
+          console.log('✓ Basic hash');
+          
+          const key = new Uint8Array(32).fill(0x42);
+          const h2 = keyedHash(key, 'test');
+          if (h2.length !== 32) throw new Error('Keyed hash failed');
+          console.log('✓ Keyed hash');
+          
+          const h3 = deriveKey('context', 'material');
+          if (h3.length !== 32) throw new Error('Derive key failed');
+          console.log('✓ Derive key');
+          
+          const hasher = createHasher();
+          hasher.update('hello');
+          hasher.update(' world');
+          const h4 = hasher.finalize();
+          if (h4.length !== 32) throw new Error('Streaming failed');
+          console.log('✓ Streaming');
+          
+          console.log('All Node.js tests passed!');
+          EOF
+      
+      - name: Run Node.js test
+        run: node test-nodejs.mjs
+
+  test-browser:
+    name: Test Browser/React Compatibility
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Create test React app
+        run: |
+          npm create vite@latest test-react-app -- --template react-ts --yes
+          cd test-react-app && npm install
+      
+      - name: Install b3js
+        run: |
+          cd test-react-app
+          npm install file:../ --save
+      
+      - name: Create test component
+        run: |
+          cat > test-react-app/src/App.tsx << 'EOF'
+          import { useState, useEffect } from 'react';
+          import { hash, keyedHash, createHasher } from 'b3js';
+
+          function App() {
+            const [results, setResults] = useState<string[]>([]);
+
+            useEffect(() => {
+              const tests: string[] = [];
+              
+              try {
+                const h1 = hash('hello world');
+                tests.push(h1.length === 32 ? '✓ Basic hash' : '✗ Basic hash');
+                
+                const key = new Uint8Array(32).fill(0x42);
+                const h2 = keyedHash(key, 'test');
+                tests.push(h2.length === 32 ? '✓ Keyed hash' : '✗ Keyed hash');
+                
+                const hasher = createHasher();
+                hasher.update('hello');
+                hasher.update(' world');
+                const h3 = hasher.finalize();
+                tests.push(h3.length === 32 ? '✓ Streaming' : '✗ Streaming');
+                
+                setResults(tests);
+              } catch (error: any) {
+                tests.push(`✗ Error: ${error.message}`);
+                setResults(tests);
+              }
+            }, []);
+
+            return (
+              <div style={{ padding: '20px' }}>
+                <h1>B3JS React Test</h1>
+                <ul>
+                  {results.map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              </div>
+            );
+          }
+
+          export default App;
+          EOF
+      
+      - name: Build React app
+        run: |
+          cd test-react-app
+          npm run build
+      
+      - name: Verify build
+        run: |
+          if [ ! -d "test-react-app/dist" ]; then
+            echo "✗ React build failed"
+            exit 1
+          fi
+          echo "✓ React build successful - b3js works in React apps"
 

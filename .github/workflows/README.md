@@ -8,27 +8,23 @@ The `publish.yml` workflow automatically publishes to npm when:
 
 ### Setup
 
-1. **Create an npm access token:**
+See [NPM_PUBLISH_SETUP.md](../../NPM_PUBLISH_SETUP.md) for detailed authentication setup instructions.
+
+**Quick Setup:**
+
+1. **Create an npm Automation token:**
    - Go to https://www.npmjs.com/settings/YOUR_USERNAME/tokens
-   - Click "Generate New Token"
-   - Select "Automation" type
+   - Generate "Automation" token
    - Copy the token
 
-2. **Add the token to GitHub:**
-   - Go to your repository settings
-   - Navigate to "Secrets and variables" → "Actions"
-   - Click "New repository secret"
-   - Name: `NPM_TOKEN`
-   - Value: Paste your npm token
-   - Click "Add secret"
+2. **Add to GitHub Secrets:**
+   - Repository → Settings → Secrets and variables → Actions
+   - Add secret: `NPM_TOKEN` with your token
 
 3. **Publishing a new version:**
    - Update the `version` field in `package.json`
    - Commit and push to `master`/`main`
-   - The workflow will automatically:
-     - Run tests
-     - Check if version changed
-     - Publish to npm if version changed
+   - The workflow will automatically publish if version changed
 
 ### Workflow Steps
 

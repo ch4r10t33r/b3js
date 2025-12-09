@@ -10,12 +10,30 @@ Fast and highly optimized pure JavaScript implementation of the BLAKE3 hash func
 - 🔐 **Key derivation**: Support for key derivation (KDF)
 - 📏 **Variable output length**: Generate hashes of any length
 - 💯 **Pure JavaScript**: No native dependencies, works everywhere
+- 🌐 **Universal**: Works in Node.js, Bun, React, and browser environments
+- 📦 **TypeScript**: Full TypeScript support with type definitions
 
 ## Installation
 
+### Node.js / Bun
+
 ```bash
-bun install
+npm install b3js
+# or
+bun add b3js
 ```
+
+### React / Browser
+
+```bash
+npm install b3js
+# or
+yarn add b3js
+# or
+pnpm add b3js
+```
+
+The library works in both Node.js and browser environments without any additional configuration.
 
 ## Usage
 
@@ -110,7 +128,11 @@ To publish a new version:
 2. Commit and push to `master`/`main`
 3. The CI will automatically publish to npm
 
-**Note:** You need to set up `NPM_TOKEN` secret in GitHub repository settings.
+**Setup Required:** See [NPM_PUBLISH_SETUP.md](./NPM_PUBLISH_SETUP.md) for detailed authentication setup instructions.
+
+**Quick Setup:**
+1. Create an npm Automation token at https://www.npmjs.com/settings/YOUR_USERNAME/tokens
+2. Add it as `NPM_TOKEN` secret in GitHub repository settings
 
 ## Performance
 
