@@ -75,25 +75,32 @@ function g(
   mx: number,
   my: number
 ): void {
-  let sa = state[a];
-  let sb = state[b];
-  let sc = state[c];
-  let sd = state[d];
+  // OPTIMIZATION: Write to state immediately to reduce register pressure
+  // and potentially improve cache behavior
+  const sa = state[a];
+  const sb = state[b];
+  const sc = state[c];
+  const sd = state[d];
   
-  sa = (sa + sb + mx) >>> 0;
-  sd = rotr32(sd ^ sa, 16);
-  sc = (sc + sd) >>> 0;
-  sb = rotr32(sb ^ sc, 12);
+  // First round of mixing
+  let t1 = (sa + sb + mx) >>> 0;
+  state[a] = t1;
+  let t2 = rotr32(sd ^ t1, 16);
+  state[d] = t2;
+  let t3 = (sc + t2) >>> 0;
+  state[c] = t3;
+  let t4 = rotr32(sb ^ t3, 12);
+  state[b] = t4;
   
-  sa = (sa + sb + my) >>> 0;
-  sd = rotr32(sd ^ sa, 8);
-  sc = (sc + sd) >>> 0;
-  sb = rotr32(sb ^ sc, 7);
-  
-  state[a] = sa;
-  state[b] = sb;
-  state[c] = sc;
-  state[d] = sd;
+  // Second round of mixing
+  t1 = (t1 + t4 + my) >>> 0;
+  state[a] = t1;
+  t2 = rotr32(t2 ^ t1, 8);
+  state[d] = t2;
+  t3 = (t3 + t2) >>> 0;
+  state[c] = t3;
+  t4 = rotr32(t4 ^ t3, 7);
+  state[b] = t4;
 }
 
 /**
