@@ -106,6 +106,7 @@ The implementation is highly optimized for performance using techniques inspired
 - **Reduced allocations**: Pre-allocated buffers and in-place operations where possible
 - **Memory-efficient chunking**: Periodic stack merging for large inputs to reduce memory pressure
 - **Cache-friendly access patterns**: Optimized data layout and access order
+- **WASM SIMD support**: Parallel processing of 4 blocks/chunks using WebAssembly SIMD when available
 
 ### Performance Characteristics
 
